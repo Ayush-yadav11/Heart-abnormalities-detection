@@ -1,0 +1,37 @@
+/* Custom CSS for Node-RED Dashboard */
+
+/* Set background for the entire dashboard */
+body.nr-dashboard-theme {
+    background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%);
+}
+
+/* Style for dashboard panels */
+.nr-dashboard-cardpanel {
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 10px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    margin: 10px;
+    padding: 15px;
+}
+
+/* Style for gauge charts */
+.nr-dashboard-gauge {
+    background: transparent;
+}
+
+/* Style for text elements */
+.nr-dashboard-text {
+    color: #2c3e50;
+    font-family: 'Segoe UI', Arial, sans-serif;
+}
+
+/* Style for headers */
+.nr-dashboard-theme md-toolbar {
+    background-color: #2c3e50 !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Style for groups */
+.nr-dashboard-theme ui-card-panel {
+    background: transparent;
+}
