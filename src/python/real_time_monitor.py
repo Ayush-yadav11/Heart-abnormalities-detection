@@ -1,82 +1,90 @@
-from max30102_reader import MAX30102Reader
-from pulse_rate_classifier import PulseRateClassifier
-import numpy as np
-from time import sleep
-
-def train_classifier_with_synthetic_data():
-    # Generate synthetic training data similar to original implementation
-    np.random.seed(42)
-    sampling_rate = 100  # Hz
-    duration = 60  # seconds
-    t = np.linspace(0, duration, duration * sampling_rate)
-    
-    normal_signals = []
-    abnormal_signals = []
-    
-    for _ in range(50):
-        normal = np.sin(2 * np.pi * 1.2 * t) + 0.1 * np.random.randn(len(t))
-        normal_signals.append(normal)
-        
-        abnormal = np.sin(2 * np.pi * 1.2 * t) * np.sin(2 * np.pi * 0.1 * t) + 0.3 * np.random.randn(len(t))
-        abnormal_signals.append(abnormal)
-    
-    classifier = PulseRateClassifier()
-    features = []
-    labels = []
-    
-    # Process normal signals
-    for signal_data in normal_signals:
-        filtered = classifier.preprocess_signal(signal_data, sampling_rate)
-        feature_dict = classifier.extract_features(filtered, sampling_rate)
-        features.append(list(feature_dict.values()))
-        labels.append(0)
-    
-    # Process abnormal signals
-    for signal_data in abnormal_signals:
-        filtered = classifier.preprocess_signal(signal_data, sampling_rate)
-        feature_dict = classifier.extract_features(filtered, sampling_rate)
-        features.append(list(feature_dict.values()))
-        labels.append(1)
-    
-    # Train the classifier
-    classifier.train(np.array(features), np.array(labels))
-    return classifier
+import pandas as pd
+from collections import deque
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
 
 def main():
-    # Initialize sensor reader
-    sensor = MAX30102Reader()
-    
-    # Train classifier with synthetic data
-    classifier = train_classifier_with_synthetic_data()
-    
-    print("Starting real-time monitoring...")
-    print("Press Ctrl+C to stop")
-    
+    # Load data from CSV
+    csv_path = "src/python/pulse_rate_dataset.csv"
     try:
-        while True:
-            # Get 1 second of data
-            signal_window = sensor.get_signal_window(duration=1)
-            
-            if len(signal_window) == sensor.sampling_rate:
-                # Preprocess the signal
-                filtered_signal = classifier.preprocess_signal(signal_window, sensor.sampling_rate)
-                
-                # Extract features
-                features = classifier.extract_features(filtered_signal, sensor.sampling_rate)
-                
-                # Make prediction
-                prediction = classifier.predict([list(features.values())])[0]
-                
-                # Print result
-                status = "Normal" if prediction == 0 else "Abnormal"
-                print(f"Heart Rate Status: {status}")
-            
-            sleep(0.1)  # Small delay to prevent CPU overload
-            
+        data = pd.read_csv(csv_path)
+        if len(data.columns) != 3 or not all(col in data.columns for col in ['time', 'pulse_rate', 'spo2']):
+            print(f"Error: CSV file must have columns: time, pulse_rate, spo2")
+            return
+    except FileNotFoundError:
+        print(f"Error: Could not find {csv_path}. Please ensure the data file exists.")
+        return
+    except Exception as e:
+        print(f"Error loading data: {str(e)}")
+        return
+
+    # Convert all columns to numeric type
+    data = data.apply(pd.to_numeric, errors='coerce')
+    data = data.dropna()  # Remove any rows with invalid data
+    if len(data) == 0:
+        print("Error: No valid data found in CSV file")
+        return
+    
+    # Initialize data storage with larger window for better trend visibility
+    max_points = 200  # Increased buffer size for longer history
+    times = deque(maxlen=max_points)
+    pulse_rates = deque(maxlen=max_points)
+    spo2_values = deque(maxlen=max_points)
+    
+    # Set up the figure and subplots
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
+    fig.suptitle('Real-time Vital Signs Monitoring')
+    
+    # Initialize empty lines
+    line1, = ax1.plot([], [], 'b-', label='Pulse Rate')
+    line2, = ax2.plot([], [], 'r-', label='SpO2')
+    
+    # Set up axes
+    ax1.set_ylim(40, 200)
+    ax1.set_ylabel('BPM')
+    ax1.grid(True)
+    ax1.legend()
+    
+    ax2.set_ylim(80, 100)
+    ax2.set_ylabel('%')
+    ax2.grid(True)
+    ax2.legend()
+    
+    # Add threshold lines for abnormal heart rates
+    ax1.axhline(y=60, color='r', linestyle='--', alpha=0.5, label='Bradycardia')
+    ax1.axhline(y=100, color='r', linestyle='--', alpha=0.5, label='Tachycardia')
+    
+    def update(frame):
+        if frame >= len(data):
+            return line1, line2
+        
+        # Get current values
+        current_time = data['time'].iloc[frame]
+        pulse_rate = data['pulse_rate'].iloc[frame]
+        spo2 = data['spo2'].iloc[frame]
+        
+        # Update data
+        times.append(current_time)
+        pulse_rates.append(pulse_rate)
+        spo2_values.append(spo2)
+        
+        # Update plot data
+        line1.set_data(list(times), list(pulse_rates))
+        line2.set_data(list(times), list(spo2_values))
+        
+        # Adjust x axis limits
+        for ax in [ax1, ax2]:
+            ax.set_xlim(max(0, current_time - 10), current_time + 3)
+        
+        return line1, line2
+    
+    print("Starting vital signs monitoring...")
+    try:
+        ani = FuncAnimation(fig, update, frames=len(data), interval=50, blit=True, cache_frame_data=False)
+        plt.show()
     except KeyboardInterrupt:
-        print("\nStopping monitoring...")
-    finally:
-        sensor.close()
+        print("\nStopping analysis...")
+    print("Analysis complete!")
 
 if __name__ == "__main__":
     main()
